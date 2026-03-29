@@ -26,7 +26,8 @@ packages = [
     "starlette==0.49.3",
     "anyio==4.12.0",
     "a2wsgi==1.10.7",
-    "psycopg[binary]"
+    "psycopg[binary]",
+    "email-validator>=2.0.0"
 ]
 
 def install(package):

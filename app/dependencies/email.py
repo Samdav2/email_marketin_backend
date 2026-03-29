@@ -11,13 +11,18 @@ from app.core.settings import settings
 
 logger = logging.getLogger(__name__)
 
-TEMPLATE_FOLDER = Path("app/templates")
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+TEMPLATE_FOLDER = BASE_DIR / "templates"
+ASSETS_FOLDER = BASE_DIR / "app" / "assets"
+
 if not TEMPLATE_FOLDER.exists():
     logger.error(f"Email template folder not found at: {TEMPLATE_FOLDER.resolve()}")
 
-ASSETS_FOLDER = Path("app/assets")
 if not ASSETS_FOLDER.exists():
-    logger.error(f"Assets folder not found at: {ASSETS_FOLDER.resolve()}")
+    # Fallback to root assets if app/assets doesn't exist
+    ASSETS_FOLDER = BASE_DIR / "assets"
+    if not ASSETS_FOLDER.exists():
+        logger.error(f"Assets folder not found at: {ASSETS_FOLDER.resolve()}")
 
 template_loader = jinja2.FileSystemLoader(searchpath=TEMPLATE_FOLDER)
 template_env = jinja2.Environment(loader=template_loader, autoescape=True)

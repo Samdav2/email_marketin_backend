@@ -2,8 +2,13 @@ import os
 from typing import List, Dict, Optional
 
 class TemplateLoaderService:
-    def __init__(self, base_dir: str = "templates"):
-        self.base_dir = base_dir
+    def __init__(self, base_dir: Optional[str] = None):
+        if base_dir is None:
+            # Resolve absolute path to project root/templates
+            from pathlib import Path
+            self.base_dir = str(Path(__file__).resolve().parent.parent.parent / "templates")
+        else:
+            self.base_dir = base_dir
 
     def list_templates(self) -> Dict[str, List[str]]:
         """List all available HTML and Text templates."""
