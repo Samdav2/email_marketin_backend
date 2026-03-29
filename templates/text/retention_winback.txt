@@ -1,0 +1,10 @@
+We Miss You!
+
+Hi {name},
+
+It's been a while since we've seen you. We miss you and would love to welcome you back!
+As a special thank you, we're offering you {incentive}.
+
+Claim Your Offer: {comeback_link}
+
+Offer valid until {expiry_date}

@@ -1,0 +1,10 @@
+Hello {name},
+
+{announcement_title}
+
+{announcement_content}
+
+Thank you for your continued support.
+
+Best regards,
+The Team

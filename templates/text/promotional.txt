@@ -1,0 +1,9 @@
+Hi {name},
+
+We're excited to offer you an exclusive {discount}% discount on your next purchase.
+
+Claim Your Offer Now: {link}
+
+Offer valid until {expiry_date}
+
+© 2026 Email Marketing. All rights reserved.

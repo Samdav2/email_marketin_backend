@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webinar Invitation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-100 py-10 px-4 sm:px-6 antialiased selection:bg-blue-200 selection:text-blue-900">
+    <div class="max-w-[600px] mx-auto bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-200">
+        <!-- Header -->
+        <div class="px-8 py-6 text-center border-b border-slate-100 flex items-center justify-center gap-2">
+            <div class="bg-blue-600 text-white p-1.5 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="transform -rotate-45 relative left-0.5 top-0.5">
+                    <line x1="22" x2="11" y1="2" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </div>
+            <span class="text-2xl font-black tracking-tighter text-slate-900">Aero<span
+                    class="text-blue-600">Mail.</span></span>
+        </div>
+
+        <!-- Hero -->
+        <div class="bg-slate-900 p-10 text-center relative overflow-hidden">
+            <div
+                class="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 bg-blue-600 rounded-full mix-blend-screen filter blur-[50px] opacity-70">
+            </div>
+            <div class="relative z-10">
+                <span
+                    class="inline-block py-1 px-3 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold tracking-wider uppercase mb-6 border border-blue-500/30">Live
+                    Webinar</span>
+                <h1 class="text-4xl font-black text-white leading-tight tracking-tight mb-4">{topic}</h1>
+                <p class="text-slate-300 text-base leading-relaxed mb-8 max-w-[400px] mx-auto">Join us for an exclusive
+                    deep dive with industry experts.</p>
+            </div>
+        </div>
+
+        <!-- Body -->
+        <div class="p-10">
+            <p class="text-slate-800 text-lg font-semibold mb-4">Hi {name},</p>
+            <p class="text-slate-600 leading-relaxed mb-8">You're invited to attend our exclusive webinar. We'll be
+                covering strategy, execution, and everything in between.</p>
+
+            <div class="bg-slate-50 border border-slate-100 rounded-2xl p-8 mb-8">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-blue-600 text-white p-2 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                <line x1="16" y1="2" x2="16" y2="6"></line>
+                                <line x1="8" y1="2" x2="8" y2="6"></line>
+                                <line x1="3" y1="10" x2="21" y2="10"></line>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase">Date</p>
+                            <p class="text-sm font-bold text-slate-900">{webinar_date} at {webinar_time}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="bg-blue-600 text-white p-2 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase">Speaker</p>
+                            <p class="text-sm font-bold text-slate-900">{speaker_name}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p class="text-slate-600 leading-relaxed text-center mb-8">{webinar_description}</p>
+
+            <div class="text-center">
+                <a href="{webinar_link}"
+                    class="inline-block bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-12 rounded-full text-sm transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)] no-underline">Join
+                    Webinar</a>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="bg-slate-50 border-t border-slate-100 p-8 text-center text-xs text-slate-400">
+            <p class="mb-2">© 2026 AeroMail. All rights reserved.</p>
+            <p><a href="#" class="text-blue-500 underline">Unsubscribe</a> | <a href="#"
+                    class="text-blue-500 underline">Manage Preferences</a></p>
+        </div>
+    </div>
+</body>
+
+</html>

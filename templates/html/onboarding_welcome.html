@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Onboarding Welcome</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-100 py-10 px-4 sm:px-6 antialiased selection:bg-blue-200 selection:text-blue-900">
+    <div class="max-w-[600px] mx-auto bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-200">
+        <!-- Header -->
+        <div class="px-8 py-6 text-center border-b border-slate-100 flex items-center justify-center gap-2">
+            <div class="bg-blue-600 text-white p-1.5 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="transform -rotate-45 relative left-0.5 top-0.5">
+                    <line x1="22" x2="11" y1="2" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </div>
+            <span class="text-2xl font-black tracking-tighter text-slate-900">Aero<span
+                    class="text-blue-600">Mail.</span></span>
+        </div>
+
+        <!-- Hero -->
+        <div class="bg-slate-900 p-10 text-center relative overflow-hidden">
+            <div
+                class="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 bg-blue-600 rounded-full mix-blend-screen filter blur-[50px] opacity-70">
+            </div>
+            <div class="relative z-10">
+                <span
+                    class="inline-block py-1 px-3 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold tracking-wider uppercase mb-6 border border-blue-500/30">Welcome
+                    Aboard</span>
+                <h1 class="text-4xl font-black text-white leading-tight tracking-tight mb-4">Glad You're <span
+                        class="text-blue-400">Here.</span></h1>
+                <p class="text-slate-300 text-base leading-relaxed mb-8 max-w-[400px] mx-auto">We're excited to have you
+                    on board, {name}! Let's get you started on your journey.</p>
+            </div>
+        </div>
+
+        <!-- Body -->
+        <div class="p-10">
+            <h3 class="text-slate-800 text-lg font-bold mb-6">Your Onboarding Roadmap:</h3>
+
+            <div class="space-y-4 mb-8">
+                <div class="bg-slate-50 border border-slate-100 rounded-2xl p-6 flex items-start gap-4">
+                    <div
+                        class="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm">
+                        1</div>
+                    <p class="text-slate-600 text-sm leading-relaxed"><strong>Profile Setup:</strong> Complete your
+                        business profile to personalize your outreach.</p>
+                </div>
+                <div class="bg-white border border-slate-100 rounded-2xl p-6 flex items-start gap-4">
+                    <div
+                        class="bg-slate-900 text-white w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm">
+                        2</div>
+                    <p class="text-slate-600 text-sm leading-relaxed"><strong>Explore Features:</strong> Discover our
+                        advanced data-driven campaign tools.</p>
+                </div>
+                <div class="bg-blue-50 border border-blue-100 rounded-2xl p-6 flex items-start gap-4">
+                    <div
+                        class="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm">
+                        3</div>
+                    <p class="text-slate-600 text-sm leading-relaxed"><strong>First Campaign:</strong> Launch your first
+                        outreach and watch your metrics grow.</p>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <a href="#"
+                    class="inline-block bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-12 rounded-full text-sm transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)] no-underline">Start
+                    Your Journey</a>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="bg-slate-50 border-t border-slate-100 p-8 text-center text-xs text-slate-400">
+            <p class="mb-2">© 2026 AeroMail. All rights reserved.</p>
+            <p><a href="#" class="text-blue-500 underline">Unsubscribe</a> | <a href="#"
+                    class="text-blue-500 underline">Manage Preferences</a></p>
+        </div>
+    </div>
+</body>
+
+</html>

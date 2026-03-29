@@ -1,0 +1,9 @@
+Join Our Webinar: {topic}
+
+Date & Time: {webinar_date} at {webinar_time}
+Speaker: {speaker_name}
+Duration: {duration}
+
+{webinar_description}
+
+Join Webinar: {webinar_link}
