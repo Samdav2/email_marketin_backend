@@ -536,53 +536,13 @@ email_service = EmailService()
 async def send_email(email: EmailStr, subject: str, body: str) -> bool:
     """
     Send email with custom HTML body (for marketing campaigns)
-
-    Args:
-        email: Recipient email address
-        subject: Email subject
-        body: HTML body content
-
-    Returns:
-        True if successful, False otherwise
+    Delegates to unified_email_service (Resend, SMTP, Mailjet) based on EMAIL_PROVIDER setting.
     """
-    try:
-        from mailjet_rest import Client
+    from app.dependencies.email_dispatcher import unified_email_service
+    return await unified_email_service.send_email(
+        recipient=email,
+        subject=subject,
+        body=body,
+        is_html=True
+    )
 
-        mailjet = Client(auth=(settings.MAILJET_API_KEY, settings.MAILJET_SECRET_KEY), version='v3.1')
-
-        message_payload = {
-            "From": {
-                "Email": settings.SMTP_FROM,
-                "Name": settings.SMTP_FROM_NAME
-            },
-            "ReplyTo": {
-                "Email": settings.SMTP_FROM,
-                "Name": settings.SMTP_FROM_NAME
-            },
-            "To": [
-                {
-                    "Email": email,
-                    "Name": "Recipient"
-                }
-            ],
-            "Subject": subject,
-            "TextPart": subject,  # Fallback text
-            "HTMLPart": body
-        }
-
-        data = {
-            'Messages': [message_payload]
-        }
-
-        result = mailjet.send.create(data=data)
-
-        if result.status_code == 200:
-            logger.info(f"Email sent successfully to {email}")
-            return True
-        else:
-            logger.error(f"Failed to send email to {email}. Status: {result.status_code}")
-            return False
-
-    except Exception as e:
-        logger.error(f"Exception while sending email to {email}: {str(e)}")
-        return False

@@ -36,3 +36,22 @@ class ScrapeToDBResponse(BaseModel):
     duplicates_skipped: int
     errors: int
     results: List[LeadData]
+
+
+class ScrapeTaskResponse(BaseModel):
+    task_id: str
+    status: str
+    request_type: str
+    message: str
+    progress: dict
+    created_at: str
+    started_at: str | None = None
+    completed_at: str | None = None
+    error: str | None = None
+    results: List[dict] = []
+
+
+class ScrapeTaskListResponse(BaseModel):
+    total: int
+    tasks: List[ScrapeTaskResponse]
+

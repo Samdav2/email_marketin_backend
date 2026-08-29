@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from typing import Optional
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.db.session import get_session
+from app.core.settings import settings
 from app.schema.email_management import (
     EmailListResponse,
     SendEmailRequest,
@@ -19,12 +22,29 @@ from app.repo.email_template import (
     delete_template
 )
 from app.service.email_sending_service import send_single_email, send_bulk_emails
-from app.service.email_template_service import initialize_default_templates
+from app.service.email_template_service import (
+    initialize_default_templates,
+    verify_template_spam_risk
+)
+from app.dependencies.email_dispatcher import unified_email_service
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["email_management"], prefix="/emails")
+
+
+class SpamVerifyRequest(BaseModel):
+    template_id: Optional[str] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
+
+
+class TestSendEmailRequest(BaseModel):
+    recipient_email: str
+    subject: str = "Test Email Deliverability"
+    body: str = "<p>Hello! This is a test email sent from Email Marketing backend.</p>"
+    is_html: bool = True
 
 
 # ==================== EMAIL LIST ENDPOINTS ====================
@@ -35,8 +55,6 @@ async def get_all_emails_endpoint(
 ):
     """
     Get all emails from database
-
-    Returns list of all unique emails collected from scraping
     """
     try:
         emails = await get_all_emails(db)
@@ -62,13 +80,10 @@ async def list_templates(
 ):
     """
     Get all available email templates
-
-    Returns list of professional email templates ready to use
     """
     try:
         templates = await get_all_templates(db)
         if not templates:
-            # Initialize default templates on first access
             await initialize_default_templates(db)
             templates = await get_all_templates(db)
 
@@ -99,8 +114,6 @@ async def get_template(
 ):
     """
     Get specific email template by ID
-
-    Returns template details including subject and HTML body
     """
     try:
         template = await get_template_by_id(template_id, db)
@@ -135,9 +148,7 @@ async def create_new_template(
     db: AsyncSession = Depends(get_session)
 ):
     """
-    Create new email template (admin only)
-
-    Create custom email templates for different purposes
+    Create new email template
     """
     try:
         template = await create_template(
@@ -173,9 +184,7 @@ async def update_template_endpoint(
     db: AsyncSession = Depends(get_session)
 ):
     """
-    Update email template (admin only)
-
-    Modify existing template details
+    Update email template
     """
     try:
         update_data = request.model_dump(exclude_unset=True)
@@ -212,9 +221,7 @@ async def delete_template_endpoint(
     db: AsyncSession = Depends(get_session)
 ):
     """
-    Delete email template (admin only)
-
-    Remove template from system
+    Delete email template
     """
     try:
         success = await delete_template(template_id, db)
@@ -236,6 +243,36 @@ async def delete_template_endpoint(
         )
 
 
+@router.post("/templates/verify-spam")
+async def verify_template_spam_endpoint(
+    request: SpamVerifyRequest,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Verify template content for spam triggers, anti-spam footers, and deliverability risk.
+    """
+    subject = request.subject or ""
+    body = request.body or ""
+
+    if request.template_id:
+        template = await get_template_by_id(request.template_id, db)
+        if not template:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Template {request.template_id} not found"
+            )
+        subject = template.subject
+        body = template.body
+
+    if not subject and not body:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide either template_id or subject and body to verify."
+        )
+
+    return verify_template_spam_risk(subject, body)
+
+
 # ==================== EMAIL SENDING ENDPOINTS ====================
 
 @router.post("/send", response_model=dict)
@@ -244,9 +281,7 @@ async def send_email_endpoint(
     db: AsyncSession = Depends(get_session)
 ):
     """
-    Send email to single recipient using template (admin only)
-
-    Use a pre-designed template to send professional emails
+    Send email to single recipient using template
     """
     try:
         result = await send_single_email(
@@ -265,7 +300,8 @@ async def send_email_endpoint(
         return {
             "success": True,
             "message": f"Email sent to {request.recipient_email}",
-            "recipient": request.recipient_email
+            "recipient": request.recipient_email,
+            "provider": settings.EMAIL_PROVIDER
         }
     except HTTPException:
         raise
@@ -283,13 +319,7 @@ async def send_bulk_emails_endpoint(
     db: AsyncSession = Depends(get_session)
 ):
     """
-    Send emails to multiple recipients using template (admin only)
-
-    Send bulk professional emails to scraped email lists
-
-    - Processed in batches of 10 for optimal performance
-    - Supports dynamic template variables
-    - Returns detailed success/failure report
+    Send emails to multiple recipients using template
     """
     try:
         if not request.recipient_emails:
@@ -321,3 +351,25 @@ async def send_bulk_emails_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error sending bulk emails: {str(e)}"
         )
+
+
+@router.post("/test-send")
+async def test_send_email_endpoint(
+    request: TestSendEmailRequest
+):
+    """
+    Test send an email to a single address using configured EMAIL_PROVIDER (Resend, SMTP, Mailjet).
+    """
+    success = await unified_email_service.send_email(
+        recipient=request.recipient_email,
+        subject=request.subject,
+        body=request.body,
+        is_html=request.is_html
+    )
+
+    return {
+        "success": success,
+        "recipient": request.recipient_email,
+        "provider": settings.EMAIL_PROVIDER,
+        "message": f"Email test sent via {settings.EMAIL_PROVIDER} (success={success})"
+    }

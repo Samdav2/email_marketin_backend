@@ -5,7 +5,7 @@ Handles saving extracted emails and sending campaigns
 from typing import List, Set
 from app.model.emails import Email, Category, Campaign
 from app.repo.email import save_campaign
-from app.dependencies.smtp_email import email_service
+from app.dependencies.email_dispatcher import unified_email_service
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 import logging
@@ -110,8 +110,8 @@ async def send_email_campaign(
             results['total_recipients'] = len(email_addresses)
 
             if email_addresses:
-                # Send bulk email
-                send_results = await email_service.send_bulk_email(
+                # Send bulk email via unified provider
+                send_results = await unified_email_service.send_bulk_email(
                     email_addresses,
                     subject,
                     body,
@@ -165,4 +165,5 @@ async def send_email_to_specific(
     Returns:
         bool: Success status
     """
-    return await email_service.send_email(recipient, subject, body, is_html)
+    return await unified_email_service.send_email(recipient, subject, body, is_html)
+

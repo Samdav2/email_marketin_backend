@@ -28,6 +28,8 @@ packages = [
     "a2wsgi==1.10.7",
     "psycopg[binary]",
     "email-validator>=2.0.0"
+    "cdx_toolkit"
+    "asyncpg"
 ]
 
 def install(package):
