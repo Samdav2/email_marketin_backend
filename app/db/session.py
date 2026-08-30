@@ -10,12 +10,22 @@ from app.model.emails import Email, Campaign
 from app.model.email_template import EmailTemplate
 
 
+db_url = settings.DATABASE_URL
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+engine_kwargs = {"pool_pre_ping": True}
+if "sqlite" in db_url:
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 2
+
 engine = create_async_engine(
-    url=settings.DATABASE_URL,
-    pool_size=10,
-    max_overflow=2,
-    pool_pre_ping=True,
-    echo=True
+    url=db_url,
+    **engine_kwargs
 )
 
 async def get_session() -> AsyncSession:

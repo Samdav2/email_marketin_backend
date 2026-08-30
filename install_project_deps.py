@@ -27,9 +27,10 @@ packages = [
     "anyio==4.12.0",
     "a2wsgi==1.10.7",
     "psycopg[binary]",
-    "email-validator>=2.0.0"
-    "cdx_toolkit"
-    "asyncpg"
+    "email-validator>=2.0.0",
+    "cdx-toolkit",
+    "asyncpg",
+    "resend"
 ]
 
 def install(package):

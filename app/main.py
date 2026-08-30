@@ -23,10 +23,17 @@ app = FastAPI(
     version= "1.1",
 )
 
-# Configure CORS
+from app.core.settings import settings
+
+# Parse CORS origins
+raw_origins = settings.CORS_ORIGINS.split(",") if settings.CORS_ORIGINS else []
+allowed_origins = [origin.strip() for origin in raw_origins if origin.strip()]
+if settings.FRONTEND_URL and settings.FRONTEND_URL not in allowed_origins:
+    allowed_origins.append(settings.FRONTEND_URL)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://nextmail.thinkedgeconsultancy.com"],
+    allow_origins=allowed_origins if allowed_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     MAIL_FROM: str = os.getenv("MAIL_FROM", os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev"))
     MAIL_FROM_NAME: str = os.getenv("MAIL_FROM_NAME", "Email Marketing")
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,https://nextmail.thinkedgeconsultancy.com")
     PROJECT_NAME: str = os.getenv("PROJECT_NAME", "Email Marketing & Scraper")
 
     # JWT Configuration
