@@ -21,14 +21,13 @@ packages = [
     "beautifulsoup4==4.12.3",
     "aiosqlite==0.21.0",
     "slowapi==0.1.9",
-    "cdx-toolkit==0.6.14",
+    "cdx-toolkit>=0.9.0",
     "alembic==1.17.2",
     "starlette==0.49.3",
     "anyio==4.12.0",
     "a2wsgi==1.10.7",
     "psycopg[binary]",
     "email-validator>=2.0.0",
-    "cdx-toolkit",
     "asyncpg",
     "resend"
 ]
