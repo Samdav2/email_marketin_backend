@@ -1,11 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional
+import logging
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.db.session import get_session
 from app.core.settings import settings
+from fastapi.responses import Response
 from app.schema.email_management import (
+    EmailItem,
     EmailListResponse,
+    CategoryInfo,
+    CategorySummaryResponse,
     SendEmailRequest,
     BulkSendEmailRequest,
     BulkSendResponse,
@@ -13,7 +18,7 @@ from app.schema.email_management import (
     EmailTemplateUpdate,
     EmailTemplateResponse
 )
-from app.repo.email_list import get_all_emails, get_total_email_count
+from app.repo.email_list import get_all_emails, get_total_email_count, get_category_counts
 from app.repo.email_template import (
     get_all_templates,
     get_template_by_id,
@@ -27,7 +32,7 @@ from app.service.email_template_service import (
     verify_template_spam_risk
 )
 from app.dependencies.email_dispatcher import unified_email_service
-import logging
+from app.service.website_classifier import CATEGORY_TAXONOMY
 
 logger = logging.getLogger(__name__)
 
@@ -49,26 +54,135 @@ class TestSendEmailRequest(BaseModel):
 
 # ==================== EMAIL LIST ENDPOINTS ====================
 
+CATEGORY_DISPLAY_NAMES = {
+    "LOCAL_SERVICES": "Local Service Businesses",
+    "HEALTH_CARE": "Health and Care Related",
+    "FOOD_HOSPITALITY": "Food and Hospitality",
+    "PROFESSIONAL_SERVICES": "Professional Services",
+    "GENERAL": "General Business",
+    "WEB": "General Business",
+    "MARKETING": "Marketing"
+}
+
+
 @router.get("/all", response_model=EmailListResponse)
 async def get_all_emails_endpoint(
+    category: Optional[str] = None,
     db: AsyncSession = Depends(get_session)
 ):
     """
-    Get all emails from database
+    Get emails from database with optional category filtering
     """
     try:
-        emails = await get_all_emails(db)
-        total = await get_total_email_count(db)
+        raw_emails = await get_all_emails(db, category=category)
+        total_unique = await get_total_email_count(db)
+        counts = await get_category_counts(db)
+
+        items = []
+        for e in raw_emails:
+            lead_domain = getattr(e, 'domain', None)
+            if not lead_domain and '@' in e.email:
+                lead_domain = e.email.split('@')[1]
+
+            cat = getattr(e, 'category', 'GENERAL') or 'GENERAL'
+            subcat = getattr(e, 'subcategory', None)
+
+            items.append(
+                EmailItem(
+                    id=e.id,
+                    email=e.email,
+                    category=cat,
+                    subcategory=subcat,
+                    domain=lead_domain
+                )
+            )
 
         return EmailListResponse(
-            total=total,
-            emails=emails
+            total=len(items) if category and category.upper() != "ALL" else total_unique,
+            emails=items,
+            category_counts=counts
         )
     except Exception as e:
         logger.error(f"Error fetching emails: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching emails: {str(e)}"
+        )
+
+
+@router.get("/categories", response_model=CategorySummaryResponse)
+async def get_categories_summary_endpoint(
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Get summary of all available email lead categories with current counts
+    """
+    try:
+        total_unique = await get_total_email_count(db)
+        counts = await get_category_counts(db)
+
+        category_infos = []
+        for cat_key, display_name in CATEGORY_DISPLAY_NAMES.items():
+            if cat_key in ("WEB", "MARKETING"):
+                continue  # Collapse legacy into General
+            subcats = list(CATEGORY_TAXONOMY.get(cat_key, {}).keys())
+            count = counts.get(cat_key, 0)
+            if cat_key == "GENERAL":
+                count += counts.get("WEB", 0) + counts.get("MARKETING", 0)
+
+            category_infos.append(
+                CategoryInfo(
+                    id=cat_key,
+                    name=display_name,
+                    count=count,
+                    subcategories=subcats
+                )
+            )
+
+        return CategorySummaryResponse(
+            total_leads=total_unique,
+            categories=category_infos
+        )
+    except Exception as e:
+        logger.error(f"Error fetching categories summary: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching categories summary: {str(e)}"
+        )
+
+
+@router.get("/export")
+async def export_emails_csv(
+    category: Optional[str] = None,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Export scraped emails to CSV, optionally filtered by category
+    """
+    try:
+        raw_emails = await get_all_emails(db, category=category)
+
+        csv_lines = ["Email Address,Domain,Category,Subcategory"]
+        for e in raw_emails:
+            domain = getattr(e, 'domain', '') or (e.email.split('@')[1] if '@' in e.email else '')
+            cat = getattr(e, 'category', 'GENERAL') or 'GENERAL'
+            subcat = getattr(e, 'subcategory', '') or ''
+            csv_lines.append(f'"{e.email}","{domain}","{cat}","{subcat}"')
+
+        csv_content = "\n".join(csv_lines)
+        filename_cat = category.lower() if category and category.upper() != "ALL" else "all"
+        filename = f"leads-{filename_cat}.csv"
+
+        return Response(
+            content=csv_content,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        logger.error(f"Error exporting emails CSV: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error exporting emails: {str(e)}"
         )
 
 

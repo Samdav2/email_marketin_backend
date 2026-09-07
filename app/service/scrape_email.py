@@ -9,13 +9,19 @@ from typing import Set, Dict, List
 MAX_PAGES_PER_DOMAIN = 4
 HIGH_VALUE_PATHS = ['contact', 'about', 'team', 'support', 'reach', 'hello']
 
+from app.service.website_classifier import classify_website
+
 class AdvancedDomainScraper:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, preferred_category: Optional[str] = None):
         self.base_url = base_url if base_url.startswith('http') else f"http://{base_url}"
         # We clean the base netloc immediately to handle the 'www.' trap
         self.domain_netloc = self._clean_netloc(urlparse(self.base_url).netloc)
+        self.preferred_category = preferred_category
         self.visited_urls = set()
         self.found_emails = set()
+        self.crawled_html = []
+        self.category = "GENERAL"
+        self.subcategory = None
         self.email_pattern = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
 
     def _clean_netloc(self, netloc: str) -> str:
@@ -35,7 +41,10 @@ class AdvancedDomainScraper:
         return sorted(list(links), key=score_link, reverse=True)
 
     async def _extract_data(self, html_text: str, base_url_for_links: str) -> Set[str]:
-        """Extracts emails and internal links from a single page."""
+        """Extracts emails and internal links from a single page, collecting page text for classification."""
+        if len(self.crawled_html) < 3:
+            self.crawled_html.append(html_text)
+
         soup = BeautifulSoup(html_text, 'html.parser')
 
         # 1. Extract Emails via Regex
@@ -66,7 +75,7 @@ class AdvancedDomainScraper:
         return internal_links
 
     async def run(self) -> Set[str]:
-        """Executes the targeted deep crawl for the domain."""
+        """Executes the targeted deep crawl for the domain and classifies its industry."""
         pages_to_visit = [self.base_url]
         pages_crawled = 0
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -88,28 +97,43 @@ class AdvancedDomainScraper:
                     if 'text/html' not in response.headers.get('Content-Type', ''):
                         continue
 
-                    # CRITICAL FIX: Pass str(response.url) instead of current_url
-                    # so relative links don't break after a redirect!
+                    # Pass str(response.url) instead of current_url so relative links don't break after a redirect
                     new_links = await self._extract_data(response.text, str(response.url))
 
                     pages_to_visit.extend(new_links)
                     pages_to_visit = self._prioritize_links(set(pages_to_visit))
 
                 except Exception as e:
-                    # Don't fail silently anymore. Log it so we know if a site is blocking us.
                     print(f"  [!] Skipped {current_url} | Error: {type(e).__name__}")
+
+        # Classify website based on crawled content
+        try:
+            combined_html = " ".join(self.crawled_html)
+            cat, subcat = classify_website(
+                html_text=combined_html,
+                domain_url=self.domain_netloc,
+                preferred_category=self.preferred_category
+            )
+            self.category = cat
+            self.subcategory = subcat
+        except Exception as class_err:
+            print(f"  [!] Classification error for {self.domain_netloc}: {class_err}")
+            self.category = "GENERAL"
+            self.subcategory = None
 
         return self.found_emails
 
 # --- ORCHESTRATOR ---
-async def process_domain_task(domain: str, semaphore: asyncio.Semaphore) -> Dict:
+async def process_domain_task(domain: str, semaphore: asyncio.Semaphore, preferred_category: Optional[str] = None) -> Dict:
     async with semaphore:
-        scraper = AdvancedDomainScraper(domain)
+        scraper = AdvancedDomainScraper(domain, preferred_category=preferred_category)
         emails = await scraper.run()
 
         return {
             "domain": str(domain),
             "emails": list(emails),
+            "category": scraper.category,
+            "subcategory": scraper.subcategory,
             "pages_scanned": len(scraper.visited_urls),
             "status": "success" if emails else "no_emails_found"
         }
@@ -214,6 +238,8 @@ async def scrape_email_to_db(
         # Scrape each domain with limit check
         semaphore = asyncio.Semaphore(3)  # Max 3 concurrent scrapes
 
+        preferred_cat = category.upper() if category and category.upper() not in ("AUTO", "ALL", "WEB", "GENERAL") else None
+
         for domain_url in uk_domains:
             # Check if we've reached the email limit
             if total_emails_found >= email_limit:
@@ -222,8 +248,8 @@ async def scrape_email_to_db(
 
             try:
                 async with semaphore:
-                    # Scrape the domain
-                    scraper = AdvancedDomainScraper(domain_url)
+                    # Scrape and categorize the domain
+                    scraper = AdvancedDomainScraper(domain_url, preferred_category=preferred_cat)
                     emails = await scraper.run()
                     domains_scraped += 1
 
@@ -237,21 +263,27 @@ async def scrape_email_to_db(
                         emails = list(emails)[:-excess] if excess < len(emails) else set()
                         total_emails_found = email_limit
 
-                    # Save emails to database
+                    cat_to_save = preferred_cat if preferred_cat else scraper.category
+
+                    # Save emails to database with category, subcategory and domain
                     if emails:
                         save_result = await save_extracted_emails(
-                            emails,
-                            category_enum,
-                            db
+                            emails=emails,
+                            category=cat_to_save,
+                            db=db,
+                            subcategory=scraper.subcategory,
+                            domain=scraper.domain_netloc
                         )
                         total_emails_saved += save_result['saved']
                         duplicates_skipped += save_result['duplicates']
                         errors += save_result['failed']
 
-                    # Add to results
+                    # Add to results with rich classification metadata
                     results.append({
                         "domain": str(domain_url),
                         "emails": list(emails),
+                        "category": cat_to_save,
+                        "subcategory": scraper.subcategory,
                         "pages_scanned": len(scraper.visited_urls),
                         "status": "success" if emails else "no_emails_found"
                     })

@@ -3,9 +3,30 @@ from typing import List, Optional
 from app.model.email_template import TemplateType
 
 
+class EmailItem(BaseModel):
+    id: str
+    email: str
+    category: str = "GENERAL"
+    subcategory: Optional[str] = None
+    domain: Optional[str] = None
+
+
+class CategoryInfo(BaseModel):
+    id: str
+    name: str
+    count: int
+    subcategories: List[str] = []
+
+
+class CategorySummaryResponse(BaseModel):
+    total_leads: int
+    categories: List[CategoryInfo]
+
+
 class EmailListResponse(BaseModel):
     total: int
-    emails: List[str]
+    emails: List[EmailItem]
+    category_counts: Optional[dict] = None
 
 
 class SendEmailRequest(BaseModel):

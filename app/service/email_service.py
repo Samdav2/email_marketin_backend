@@ -13,18 +13,24 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+from typing import List, Set, Optional, Union
+
 async def save_extracted_emails(
-    emails: Set[str],
-    category: Category,
-    db: AsyncSession
+    emails: Union[Set[str], List[str]],
+    category: Union[Category, str],
+    db: AsyncSession,
+    subcategory: Optional[str] = None,
+    domain: Optional[str] = None
 ) -> dict:
     """
-    Save extracted emails to database
+    Save extracted emails to database with category, subcategory, and domain metadata.
 
     Args:
-        emails: Set of extracted email addresses
-        category: Category for the emails
+        emails: Set or List of extracted email addresses
+        category: Category for the emails (Enum or str)
         db: Database session
+        subcategory: Optional specific niche (e.g. "Care agencies", "Plumbers")
+        domain: Optional source domain of the scraped website
 
     Returns:
         dict: Results with saved, duplicate, and failed counts
@@ -36,23 +42,55 @@ async def save_extracted_emails(
         'saved_emails': []
     }
 
+    cat_str = category.value if hasattr(category, 'value') else str(category)
+
     for email_addr in emails:
         try:
-            # Check if email already exists
-            stmt = select(Email).where(Email.email == email_addr)
-            existing = await db.exec(stmt)
-            if existing.first():
-                results['duplicates'] += 1
-                logger.info(f"Email {email_addr} already exists in database")
+            email_clean = str(email_addr).strip()
+            if not email_clean or '@' not in email_clean:
                 continue
 
-            # Create new email record
-            new_email = Email(email=email_addr, category=category)
+            lead_domain = domain
+            if not lead_domain and '@' in email_clean:
+                lead_domain = email_clean.split('@')[1]
+
+            # Check if email already exists
+            stmt = select(Email).where(Email.email == email_clean)
+            existing_result = await db.exec(stmt)
+            existing = existing_result.first()
+
+            if existing:
+                # If existing had default category or no subcategory, enrich it
+                enriched = False
+                if subcategory and not getattr(existing, 'subcategory', None):
+                    existing.subcategory = subcategory
+                    enriched = True
+                if (not getattr(existing, 'category', None) or existing.category.lower() in ('web', 'general')) and cat_str not in ('WEB', 'GENERAL'):
+                    existing.category = cat_str
+                    enriched = True
+                if lead_domain and not getattr(existing, 'domain', None):
+                    existing.domain = lead_domain
+                    enriched = True
+
+                if enriched:
+                    db.add(existing)
+
+                results['duplicates'] += 1
+                logger.info(f"Email {email_clean} already exists in database (enriched: {enriched})")
+                continue
+
+            # Create new email record with full classification metadata
+            new_email = Email(
+                email=email_clean,
+                category=cat_str,
+                subcategory=subcategory,
+                domain=lead_domain
+            )
             db.add(new_email)
 
             results['saved'] += 1
-            results['saved_emails'].append(email_addr)
-            logger.info(f"Saved email: {email_addr} with category: {category}")
+            results['saved_emails'].append(email_clean)
+            logger.info(f"Saved email: {email_clean} | category: {cat_str} | subcategory: {subcategory}")
 
         except Exception as e:
             results['failed'] += 1

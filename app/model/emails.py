@@ -4,16 +4,22 @@ from typing import Optional
 from enum import Enum
 
 class Category(str, Enum):
+    local_services = "LOCAL_SERVICES"
+    health_care = "HEALTH_CARE"
+    food_hospitality = "FOOD_HOSPITALITY"
+    professional_services = "PROFESSIONAL_SERVICES"
+    general = "GENERAL"
     web = "WEB"
     marketing = "MARKETING"
-    general = "GENERAL"
 
 
 class Email(SQLModel, table=True):
     __tablename__ = 'emails'
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     email: str
-    category: Category = Field(default=Category.web)
+    category: str = Field(default="GENERAL")
+    subcategory: Optional[str] = Field(default=None, nullable=True)
+    domain: Optional[str] = Field(default=None, nullable=True)
 
 
 class Campaign(SQLModel, table=True):

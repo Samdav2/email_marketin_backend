@@ -133,6 +133,8 @@ class ScrapeTaskManager:
             errors = 0
             domains_scraped = 0
 
+            preferred_cat = category.upper() if category and category.upper() not in ("AUTO", "ALL", "WEB", "GENERAL") else None
+
             # 2. Open dedicated database session for background worker
             async with AsyncSession(engine) as db:
                 for domain_url in uk_domains:
@@ -142,7 +144,7 @@ class ScrapeTaskManager:
 
                     try:
                         async with semaphore:
-                            scraper = AdvancedDomainScraper(domain_url)
+                            scraper = AdvancedDomainScraper(domain_url, preferred_category=preferred_cat)
                             emails = await scraper.run()
                             domains_scraped += 1
 
@@ -154,11 +156,15 @@ class ScrapeTaskManager:
                                 emails = list(emails)[:-excess] if excess < len(emails) else set()
                                 total_emails_found = email_limit
 
+                            cat_to_save = preferred_cat if preferred_cat else scraper.category
+
                             if emails:
                                 save_result = await save_extracted_emails(
-                                    set(emails),
-                                    category_enum,
-                                    db
+                                    emails=set(emails),
+                                    category=cat_to_save,
+                                    db=db,
+                                    subcategory=scraper.subcategory,
+                                    domain=scraper.domain_netloc
                                 )
                                 total_emails_saved += save_result['saved']
                                 duplicates_skipped += save_result['duplicates']
@@ -167,6 +173,8 @@ class ScrapeTaskManager:
                             res_item = {
                                 "domain": str(domain_url),
                                 "emails": list(emails),
+                                "category": cat_to_save,
+                                "subcategory": scraper.subcategory,
                                 "pages_scanned": len(scraper.visited_urls),
                                 "status": "success" if emails else "no_emails_found"
                             }

@@ -36,6 +36,15 @@ async def get_session() -> AsyncSession:
     async with AsyncSession(engine) as session:
         yield session
 
+from sqlalchemy import text
+
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
+        # Ensure new columns exist on existing databases (safe migration)
+        for col_name in ["domain", "subcategory"]:
+            try:
+                await conn.execute(text(f"ALTER TABLE emails ADD COLUMN {col_name} VARCHAR"))
+            except Exception:
+                # Column already exists
+                pass

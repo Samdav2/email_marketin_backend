@@ -12,6 +12,8 @@ class LeadData(BaseModel):
     domain: str
     emails: List[str]
     status: str
+    category: str | None = None
+    subcategory: str | None = None
 
 class BulkScrapeResponse(BaseModel):
     total_processed: int
@@ -22,7 +24,7 @@ class BulkScrapeResponse(BaseModel):
 class ScrapeToDBRequest(BaseModel):
     email_limit: int = 1000  # Number of emails to scrape before stopping
     domain_limit: int = 100  # Number of domains to scrape (default 100, can go up to 10000)
-    category: str = "WEB"
+    category: str = "AUTO"
 
     class Config:
         from_attribute = True
