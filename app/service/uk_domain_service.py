@@ -3,7 +3,7 @@ import logging
 import csv
 import json
 from urllib.parse import urlparse
-from typing import List, Set
+from typing import List, Set, Optional, Tuple, Dict, Any
 
 logger = logging.getLogger(__name__)
 
