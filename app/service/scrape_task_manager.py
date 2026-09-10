@@ -9,6 +9,12 @@ from app.model.emails import Category as EmailCategory
 from app.service.uk_domain_service import discover_uk_domains
 from app.service.scrape_email import AdvancedDomainScraper, process_domain_task
 from app.service.email_service import save_extracted_emails
+from app.repo.scraped_domain import (
+    get_known_domains_db,
+    record_scraped_domain_db,
+    get_scraper_state_db,
+    set_scraper_state_db,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,99 +112,142 @@ class ScrapeTaskManager:
         logger.info(f"🚀 [Task {task_id}] Started scrape_to_db background job (limit={email_limit}, domains={domain_limit})")
 
         try:
-            # Parse category
-            try:
-                category_enum = EmailCategory[category.lower()]
-            except KeyError:
-                category_enum = EmailCategory.web
+            # 1. Fetch known domains and CDX resume index directly from PostgreSQL
+            logger.info(f"🔍 [Task {task_id}] Loading known scraped domains and resume state from PostgreSQL...")
+            known_domains = set()
+            cdx_resume_index = 0
+            async with AsyncSession(engine) as db_init:
+                known_domains = await get_known_domains_db(db_init)
+                state_str = await get_scraper_state_db("cdx_resume_index", "0", db_init)
+                try:
+                    cdx_resume_index = int(state_str)
+                except Exception:
+                    cdx_resume_index = 0
 
-            # 1. Discover UK domains using asyncio.to_thread so blocking HTTP doesn't freeze FastAPI
-            logger.info(f"🔍 [Task {task_id}] Fetching UK domains in background thread...")
-            uk_domains = await asyncio.to_thread(discover_uk_domains, target_new_domains=domain_limit)
+            logger.info(f"📚 [Task {task_id}] Fast-forwarding past {len(known_domains)} existing domains in DB. Resume index: {cdx_resume_index}")
+
+            # 2. Discover UK domains (fast and non-blocking)
+            uk_domains, next_index = await asyncio.to_thread(
+                discover_uk_domains,
+                target_new_domains=domain_limit,
+                known_domains=known_domains,
+                records_to_skip=cdx_resume_index
+            )
+
+            # Persist updated CDX resume index to DB so redeployments never lose progress
+            async with AsyncSession(engine) as db_update:
+                await set_scraper_state_db("cdx_resume_index", str(next_index), db_update)
 
             if not uk_domains:
                 task_info["status"] = "failed"
-                task_info["error"] = "No UK domains found from CDX API"
+                task_info["error"] = "No new UK domains available to scrape"
                 task_info["completed_at"] = datetime.now(timezone.utc).isoformat()
                 return
 
             task_info["progress"]["total_domains"] = len(uk_domains)
             task_info["urls"] = list(uk_domains)
 
-            semaphore = asyncio.Semaphore(3)
+            preferred_cat = category.upper() if category and category.upper() not in ("AUTO", "ALL", "WEB", "GENERAL") else None
+
+            # Concurrency control: 8 parallel workers for high throughput and immediate progress updates
+            semaphore = asyncio.Semaphore(8)
             results = []
             total_emails_found = 0
             total_emails_saved = 0
             duplicates_skipped = 0
             errors = 0
             domains_scraped = 0
+            progress_lock = asyncio.Lock()
 
-            preferred_cat = category.upper() if category and category.upper() not in ("AUTO", "ALL", "WEB", "GENERAL") else None
+            async def process_single_domain(domain_url: str):
+                nonlocal total_emails_found, total_emails_saved, duplicates_skipped, errors, domains_scraped
+                if total_emails_found >= email_limit or task_info.get("cancel_requested"):
+                    return
 
-            # 2. Iterate domains and save extracted emails with isolated transactions
-            for domain_url in uk_domains:
-                if total_emails_found >= email_limit:
-                    logger.info(f"Reached email limit of {email_limit}. Stopping scraping task {task_id}.")
-                    break
+                async with semaphore:
+                    if total_emails_found >= email_limit or task_info.get("cancel_requested"):
+                        return
 
-                try:
-                    async with semaphore:
+                    status_str = "no_emails"
+                    extracted_emails = set()
+                    pages_scanned = 0
+                    cat_assigned = preferred_cat or "GENERAL"
+                    subcat_assigned = None
+
+                    try:
                         scraper = AdvancedDomainScraper(domain_url, preferred_category=preferred_cat)
-                        emails = await scraper.run()
-                        domains_scraped += 1
+                        extracted_emails = await scraper.run()
+                        pages_scanned = len(scraper.visited_urls)
+                        cat_assigned = preferred_cat if preferred_cat else scraper.category
+                        subcat_assigned = scraper.subcategory
 
-                        emails_count = len(emails)
-                        total_emails_found += emails_count
-
-                        if total_emails_found > email_limit:
-                            excess = total_emails_found - email_limit
-                            emails = list(emails)[:-excess] if excess < len(emails) else set()
-                            total_emails_found = email_limit
-
-                        cat_to_save = preferred_cat if preferred_cat else scraper.category
-
-                        if emails:
+                        found_count = len(extracted_emails)
+                        if found_count > 0:
+                            status_str = "success"
                             save_result = await save_extracted_emails(
-                                emails=set(emails),
-                                category=cat_to_save,
-                                subcategory=scraper.subcategory,
+                                emails=set(extracted_emails),
+                                category=cat_assigned,
+                                subcategory=subcat_assigned,
                                 domain=scraper.domain_netloc
                             )
-                            total_emails_saved += save_result['saved']
-                            duplicates_skipped += save_result['duplicates']
-                            errors += save_result['failed']
+                            async with progress_lock:
+                                total_emails_found += found_count
+                                total_emails_saved += save_result['saved']
+                                duplicates_skipped += save_result['duplicates']
+                                errors += save_result['failed']
 
-                            res_item = {
+                        async with progress_lock:
+                            results.append({
                                 "domain": str(domain_url),
-                                "emails": list(emails),
-                                "category": cat_to_save,
-                                "subcategory": scraper.subcategory,
-                                "pages_scanned": len(scraper.visited_urls),
-                                "status": "success" if emails else "no_emails_found"
-                            }
-                            results.append(res_item)
+                                "emails": list(extracted_emails),
+                                "category": cat_assigned,
+                                "subcategory": subcat_assigned,
+                                "pages_scanned": pages_scanned,
+                                "status": status_str
+                            })
 
-                except Exception as domain_err:
-                    errors += 1
-                    results.append({
-                        "domain": str(domain_url),
-                        "emails": [],
-                        "pages_scanned": 0,
-                        "status": "error",
-                        "error": str(domain_err)
-                    })
+                    except Exception as dom_err:
+                        status_str = "error"
+                        async with progress_lock:
+                            errors += 1
+                            results.append({
+                                "domain": str(domain_url),
+                                "emails": [],
+                                "pages_scanned": 0,
+                                "status": "error",
+                                "error": str(dom_err)
+                            })
 
-                # Update real-time progress
-                task_info["progress"]["domains_scraped"] = domains_scraped
-                task_info["progress"]["emails_found"] = total_emails_found
-                task_info["progress"]["emails_saved"] = total_emails_saved
-                task_info["progress"]["duplicates_skipped"] = duplicates_skipped
-                task_info["progress"]["errors"] = errors
-                task_info["results"] = results
+                    finally:
+                        async with progress_lock:
+                            domains_scraped += 1
+                            task_info["progress"]["domains_scraped"] = domains_scraped
+                            task_info["progress"]["emails_found"] = total_emails_found
+                            task_info["progress"]["emails_saved"] = total_emails_saved
+                            task_info["progress"]["duplicates_skipped"] = duplicates_skipped
+                            task_info["progress"]["errors"] = errors
+                            task_info["results"] = results
+
+                        # Persist domain scrape status to PostgreSQL scraped_domains table
+                        try:
+                            async with AsyncSession(engine) as db_log:
+                                await record_scraped_domain_db(
+                                    domain=str(domain_url),
+                                    status=status_str,
+                                    emails_count=len(extracted_emails),
+                                    category=cat_assigned,
+                                    db=db_log
+                                )
+                        except Exception as log_err:
+                            logger.warning(f"Could not persist scraped domain {domain_url} to DB: {log_err}")
+
+            # Run workers concurrently across all discovered domains
+            scrape_workers = [process_single_domain(dom) for dom in uk_domains]
+            await asyncio.gather(*scrape_workers)
 
             task_info["status"] = "completed"
             task_info["completed_at"] = datetime.now(timezone.utc).isoformat()
-            logger.info(f"✅ [Task {task_id}] Scrape to DB task completed. Saved: {total_emails_saved}, Duplicates: {duplicates_skipped}")
+            logger.info(f"✅ [Task {task_id}] Scrape to DB completed. Saved: {total_emails_saved}, Duplicates: {duplicates_skipped}, Scraped Domains: {domains_scraped}")
 
         except Exception as job_err:
             logger.error(f"❌ [Task {task_id}] Background scraping failed: {job_err}", exc_info=True)

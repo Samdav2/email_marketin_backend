@@ -31,3 +31,20 @@ class Campaign(SQLModel, table=True):
     successful: int
     failed: int
     timestamp: str = Field(default_factory=lambda: str(__import__('datetime').datetime.utcnow()))
+
+
+class ScrapedDomain(SQLModel, table=True):
+    __tablename__ = 'scraped_domains'
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    domain: str = Field(unique=True, index=True)
+    status: str = Field(default="scraped")  # "success", "no_emails", "error"
+    emails_count: int = Field(default=0)
+    category: Optional[str] = Field(default=None, nullable=True)
+    scraped_at: str = Field(default_factory=lambda: str(__import__('datetime').datetime.utcnow()))
+
+
+class ScraperState(SQLModel, table=True):
+    __tablename__ = 'scraper_state'
+    key: str = Field(primary_key=True)
+    value: str
+    updated_at: str = Field(default_factory=lambda: str(__import__('datetime').datetime.utcnow()))

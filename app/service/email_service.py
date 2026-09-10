@@ -67,10 +67,11 @@ async def _save_emails_with_session(
             if not lead_domain:
                 lead_domain = parts[1]
 
-            # Check if email already exists (case-insensitive)
-            stmt = select(Email).where(func.lower(Email.email) == email_clean)
-            existing_result = await db.exec(stmt)
-            existing = existing_result.first()
+            # Check if email already exists (case-insensitive) without triggering autoflush
+            with db.no_autoflush:
+                stmt = select(Email).where(func.lower(Email.email) == email_clean)
+                existing_result = await db.exec(stmt)
+                existing = existing_result.first()
 
             if existing:
                 enriched = False
@@ -114,10 +115,27 @@ async def _save_emails_with_session(
             logger.info(f"Committed {results['saved']} emails to database")
         except Exception as e:
             await db.rollback()
-            logger.error(f"Failed to commit emails batch: {str(e)}")
-            results['failed'] += results['saved']
-            results['saved'] = 0
-            results['saved_emails'] = []
+            logger.warning(f"Batch commit failed ({e}), attempting individual row saves with savepoints...")
+            saved_count = 0
+            saved_list = []
+            for clean_addr in results['saved_emails']:
+                try:
+                    async with db.begin_nested():
+                        ind_email = Email(
+                            email=clean_addr,
+                            category=cat_str,
+                            subcategory=subcategory,
+                            domain=domain or clean_addr.split('@')[1]
+                        )
+                        db.add(ind_email)
+                    await db.commit()
+                    saved_count += 1
+                    saved_list.append(clean_addr)
+                except Exception as ind_err:
+                    logger.error(f"Failed individual save for {clean_addr}: {ind_err}")
+                    results['failed'] += 1
+            results['saved'] = saved_count
+            results['saved_emails'] = saved_list
 
     return results
 

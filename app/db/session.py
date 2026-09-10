@@ -6,7 +6,7 @@ from app.core.settings import settings
 
 # Import all models to ensure they're registered with SQLModel
 from app.model.user import User, Profile
-from app.model.emails import Email, Campaign
+from app.model.emails import Email, Campaign, ScrapedDomain, ScraperState
 from app.model.email_template import EmailTemplate
 
 
@@ -35,31 +35,55 @@ engine = create_async_engine(
 async def get_session() -> AsyncSession:
     async with AsyncSession(engine) as session:
         yield session
-
+import logging
 from sqlalchemy import text
 
+logger = logging.getLogger(__name__)
+
 async def init_db() -> None:
+    # 1. Ensure all tables are created
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-        # Ensure new columns exist on existing databases (safe migration)
-        for col_name in ["domain", "subcategory"]:
-            try:
-                await conn.execute(text(f"ALTER TABLE emails ADD COLUMN {col_name} VARCHAR"))
-            except Exception:
-                # Column already exists
-                pass
 
-        # Expand category column capacity on PostgreSQL
-        try:
-            await conn.execute(text("ALTER TABLE emails ALTER COLUMN category TYPE VARCHAR(100)"))
-        except Exception:
-            pass
+    is_postgres = "postgres" in engine.dialect.name
+    logger.info(f"Running database initialization (dialect: {engine.dialect.name})")
 
-        # Normalize legacy lowercase categories to uppercase
+    if is_postgres:
+        migrations = [
+            # Ensure columns exist on PostgreSQL
+            "ALTER TABLE emails ADD COLUMN IF NOT EXISTS domain VARCHAR",
+            "ALTER TABLE emails ADD COLUMN IF NOT EXISTS subcategory VARCHAR",
+            "ALTER TABLE scraped_domains ADD COLUMN IF NOT EXISTS category VARCHAR",
+            # Drop check constraints that might enforce enum values
+            "ALTER TABLE emails DROP CONSTRAINT IF EXISTS emails_category_check",
+            "ALTER TABLE campaigns DROP CONSTRAINT IF EXISTS campaigns_category_check",
+            # Convert emails.category from ENUM or VARCHAR(X) to VARCHAR(100)
+            "ALTER TABLE emails ALTER COLUMN category DROP DEFAULT",
+            "ALTER TABLE emails ALTER COLUMN category TYPE VARCHAR(100) USING category::text",
+            "ALTER TABLE emails ALTER COLUMN category SET DEFAULT 'GENERAL'",
+            # Convert campaigns.category from ENUM or VARCHAR(X) to VARCHAR(100)
+            "ALTER TABLE campaigns ALTER COLUMN category DROP DEFAULT",
+            "ALTER TABLE campaigns ALTER COLUMN category TYPE VARCHAR(100) USING category::text",
+            # Normalize legacy lowercase categories to uppercase
+            "UPDATE emails SET category = UPPER(category) WHERE category IS NOT NULL",
+            "UPDATE campaigns SET category = UPPER(category) WHERE category IS NOT NULL",
+        ]
+    else:
+        # SQLite migrations
+        migrations = [
+            "ALTER TABLE emails ADD COLUMN domain VARCHAR",
+            "ALTER TABLE emails ADD COLUMN subcategory VARCHAR",
+            "UPDATE emails SET category = UPPER(category) WHERE category IS NOT NULL",
+            "UPDATE campaigns SET category = UPPER(category) WHERE category IS NOT NULL",
+        ]
+
+    for stmt in migrations:
         try:
-            await conn.execute(text("UPDATE emails SET category = 'WEB' WHERE category = 'web'"))
-            await conn.execute(text("UPDATE emails SET category = 'MARKETING' WHERE category = 'marketing'"))
-            await conn.execute(text("UPDATE emails SET category = 'GENERAL' WHERE category = 'general'"))
-        except Exception:
-            pass
+            async with engine.begin() as conn:
+                await conn.execute(text(stmt))
+        except Exception as e:
+            # Expected for SQLite if column already exists or if constraint/default doesn't exist
+            logger.debug(f"Migration note for '{stmt}': {e}")
+
+    logger.info("Database initialization and migrations completed successfully.")
 

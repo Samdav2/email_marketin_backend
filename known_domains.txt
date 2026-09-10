@@ -255,3 +255,8 @@ york.ac.uk
 0027.uk
 001taxis.uk
 001.uk
+00111011.uk
+0-9.uk
+001.uk
+0009.uk
+001677.uk

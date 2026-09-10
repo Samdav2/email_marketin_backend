@@ -300,35 +300,43 @@ def _fetch_cdx_records(target_new_domains: int, records_to_skip: int, known_doma
     return discovered, current_record_index
 
 
-def discover_uk_domains(target_new_domains: int = 20) -> List[str]:
+def discover_uk_domains(
+    target_new_domains: int = 20,
+    known_domains: Optional[Set[str]] = None,
+    records_to_skip: Optional[int] = None
+) -> tuple[List[str], int]:
     """
     Resumes from the last known position and fetches N entirely new domains.
-    Includes:
-    - 15s thread-safe CDX API discovery
-    - Pre-validation of DNS so non-resolving domains are never scraped (0 DNS errors)
-    - Fallback to 2,474 real UK domains from my_uk_list.csv and curated business pools
+    Fast & non-blocking:
+    - Quick 4s CDX check (returns immediately if CDX is slow or unreachable on Railway)
+    - Instant fallback to 2,474 real UK registered domains from my_uk_list.csv
+    - Leverages PostgreSQL known_domains to guarantee fresh domains across deployments
     """
-    records_to_skip = _load_resume_index()
-    known_domains = _load_known_domains()
+    if records_to_skip is None:
+        records_to_skip = _load_resume_index()
+    if known_domains is None:
+        known_domains = _load_known_domains()
+
     new_domains = set()
     current_record_index = records_to_skip
 
     print(f"\n📚 Resuming discovery... Fast-forwarding past {records_to_skip} old records.")
 
-    # 1. Attempt CDX API Discovery inside ThreadPoolExecutor with 15s timeout
+    # 1. Attempt quick CDX API Discovery inside ThreadPoolExecutor with 4s timeout
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        future = executor.submit(_fetch_cdx_records, target_new_domains * 2, records_to_skip, known_domains)
-        cdx_discovered, cdx_last_index = future.result(timeout=15.0)
-        # Pre-validate CDX domains to ensure DNS resolves
-        live_cdx = filter_live_domains(list(cdx_discovered), target_new_domains)
-        new_domains.update(live_cdx)
+        future = executor.submit(_fetch_cdx_records, target_new_domains, records_to_skip, known_domains)
+        cdx_discovered, cdx_last_index = future.result(timeout=4.0)
+        for dom in cdx_discovered:
+            if dom not in known_domains and dom not in new_domains:
+                new_domains.add(dom)
+                if len(new_domains) >= target_new_domains:
+                    break
         if cdx_last_index > records_to_skip:
             current_record_index = cdx_last_index
     except Exception as e:
-        print(f"⚠️ CDX API Error/Timeout encountered: {e}. Switching to UK Domain Fallback Pool.")
-        logger.warning(f"CDX API Error: {e}")
-        # If records_to_skip is stalled or very high, reset to 0 so next attempt starts fresh
+        print(f"⚠️ CDX API Error/Timeout ({e}). Immediately utilizing UK Domain List.")
+        logger.warning(f"CDX API Error/Timeout: {e}")
         if records_to_skip > 50000:
             current_record_index = 0
     finally:
@@ -337,45 +345,39 @@ def discover_uk_domains(target_new_domains: int = 20) -> List[str]:
         except Exception:
             pass
 
-    # Fallback Tier 1: Local CSV list (my_uk_list.csv) with live DNS pre-filtering
+    # Fallback Tier 1: Local CSV list (my_uk_list.csv - 2,474 real UK domains)
     if len(new_domains) < target_new_domains:
         csv_domains = _load_csv_fallback_domains()
         if csv_domains:
-            csv_candidates = [
-                (d[4:] if d.startswith('www.') else d)
-                for d in csv_domains
-                if (d[4:] if d.startswith('www.') else d) not in known_domains and (d[4:] if d.startswith('www.') else d) not in new_domains
-            ]
-            needed = target_new_domains - len(new_domains)
-            live_csv = filter_live_domains(csv_candidates, needed)
-            new_domains.update(live_csv)
+            for fallback in csv_domains:
+                clean_dom = fallback[4:] if fallback.startswith('www.') else fallback
+                if clean_dom and clean_dom not in known_domains and clean_dom not in new_domains:
+                    new_domains.add(clean_dom)
+                    if len(new_domains) >= target_new_domains:
+                        break
 
     # Fallback Tier 2: Static curated top UK domains
     if len(new_domains) < target_new_domains:
-        curated_candidates = [
-            (d[4:] if d.startswith('www.') else d)
-            for d in FALLBACK_UK_DOMAINS
-            if (d[4:] if d.startswith('www.') else d) not in known_domains and (d[4:] if d.startswith('www.') else d) not in new_domains
-        ]
-        needed = target_new_domains - len(new_domains)
-        live_curated = filter_live_domains(curated_candidates, needed)
-        new_domains.update(live_curated)
+        for fallback in FALLBACK_UK_DOMAINS:
+            clean_dom = fallback[4:] if fallback.startswith('www.') else fallback
+            if clean_dom and clean_dom not in known_domains and clean_dom not in new_domains:
+                new_domains.add(clean_dom)
+                if len(new_domains) >= target_new_domains:
+                    break
 
-    # Fallback Tier 3: High-yield sector business domain generator (strictly pre-validated with DNS)
+    # Fallback Tier 3: High-yield sector business domain patterns
     if len(new_domains) < target_new_domains:
         synthetic_domains = _generate_synthetic_uk_domains()
-        synth_candidates = [
-            d for d in synthetic_domains
-            if d not in known_domains and d not in new_domains
-        ]
-        needed = target_new_domains - len(new_domains)
-        live_synth = filter_live_domains(synth_candidates, needed)
-        new_domains.update(live_synth)
+        for fallback in synthetic_domains:
+            if fallback not in known_domains and fallback not in new_domains:
+                new_domains.add(fallback)
+                if len(new_domains) >= target_new_domains:
+                    break
 
-    print(f"✅ Discovery complete: Yielded {len(new_domains)} live, resolvable UK domains out of {target_new_domains} requested.")
+    print(f"✅ Discovery complete: Yielded {len(new_domains)} UK domains out of {target_new_domains} requested in milliseconds.")
 
-    # Save state
+    # Save local state fallback
     _save_resume_index(current_record_index)
     _save_known_domains(new_domains)
 
-    return list(new_domains)
+    return list(new_domains), current_record_index

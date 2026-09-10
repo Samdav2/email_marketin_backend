@@ -86,7 +86,8 @@ class AdvancedDomainScraper:
         pages_crawled = 0
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-        async with httpx.AsyncClient(headers=headers, timeout=15.0, follow_redirects=True) as client:
+        client_timeout = httpx.Timeout(5.0, connect=3.0)
+        async with httpx.AsyncClient(headers=headers, timeout=client_timeout, verify=False, follow_redirects=True) as client:
             while pages_to_visit and pages_crawled < MAX_PAGES_PER_DOMAIN:
                 current_url = pages_to_visit.pop(0)
 
