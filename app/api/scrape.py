@@ -76,10 +76,10 @@ async def scrape_to_db(request: ScrapeToDBRequest):
                 detail="Domain limit must be at least 1"
             )
 
-        if request.domain_limit > 10000:
+        if request.domain_limit > 100000:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Domain limit cannot exceed 10000"
+                detail="Domain limit cannot exceed 100000"
             )
 
         # Block concurrent scrapes

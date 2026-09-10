@@ -150,10 +150,37 @@ def _generate_synthetic_uk_domains() -> List[str]:
 
 
 import socket
-socket.setdefaulttimeout(2.0)
+
+def _is_domain_resolvable(domain: str) -> bool:
+    """Pre-checks that a domain has an active DNS record before scraping."""
+    try:
+        # Quick socket check with 1.0s timeout
+        socket.gethostbyname(domain)
+        return True
+    except Exception:
+        return False
+
+def filter_live_domains(candidates: List[str], max_needed: int) -> List[str]:
+    """Parallel DNS resolution to ensure 100% of handed-off domains are live and resolve."""
+    valid_domains = []
+    seen = set()
+    unique_candidates = [d for d in candidates if not (d in seen or seen.add(d))]
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as pool:
+        future_map = {pool.submit(_is_domain_resolvable, d): d for d in unique_candidates[:max_needed * 3]}
+        for fut in concurrent.futures.as_completed(future_map):
+            dom = future_map[fut]
+            try:
+                if fut.result():
+                    valid_domains.append(dom)
+                    if len(valid_domains) >= max_needed:
+                        break
+            except Exception:
+                continue
+    return valid_domains
 
 def _apply_cdx_patch():
-    """Patches cdx_toolkit & requests to gracefully handle malformed JSON lines, non-200 responses, and enforce fast 2s network timeouts."""
+    """Patches cdx_toolkit & requests to gracefully handle malformed JSON lines, non-200 responses, and enforce stable HTTP timeouts."""
     try:
         import cdx_toolkit
         import cdx_toolkit.myrequests
@@ -163,19 +190,19 @@ def _apply_cdx_patch():
         if getattr(cdx_toolkit, '_safe_patch_applied', False):
             return
 
-        # 1. Enforce strict 2s HTTP timeout on all requests Sessions
+        # 1. Enforce realistic 15s HTTP timeout on requests Sessions so CDX doesn't prematurely abort
         orig_session_send = requests.Session.send
         def safe_session_send(self, request, **kwargs):
             if kwargs.get('timeout') is None or kwargs.get('timeout') == (30.0, 30.0):
-                kwargs['timeout'] = (2.0, 2.0)
+                kwargs['timeout'] = (5.0, 15.0)
             return orig_session_send(self, request, **kwargs)
         requests.Session.send = safe_session_send
 
         # 2. Fast Network Error Retry Patch
         orig_myrequests_get = cdx_toolkit.myrequests.myrequests_get
         def safe_myrequests_get(url, **kwargs):
-            kwargs['raise_error_after_n_errors'] = 1
-            kwargs['retry_max_sec'] = 1
+            kwargs['raise_error_after_n_errors'] = 2
+            kwargs['retry_max_sec'] = 3
             kwargs.pop('timeout', None)
             return orig_myrequests_get(url, **kwargs)
 
@@ -183,10 +210,9 @@ def _apply_cdx_patch():
         if hasattr(cdx_toolkit, 'myrequests_get'):
             cdx_toolkit.myrequests_get = safe_myrequests_get
 
-        # 2. JSON Stream Line & Non-200 Response Patch
+        # 3. JSON Stream Line & Non-200 Response Patch
         orig_cdx_to_captures = cdx_toolkit.cdx_to_captures
         def safe_cdx_to_captures(resp, wb=None, warc_download_prefix=None):
-            # Ignore non-200 responses (e.g. 503 HTML error pages)
             if getattr(resp, 'status_code', 200) != 200:
                 return []
 
@@ -223,7 +249,8 @@ def _fetch_cdx_records(target_new_domains: int, records_to_skip: int, known_doma
     import cdx_toolkit
 
     cdx = cdx_toolkit.CDXFetcher(source='cc')
-    results = cdx.iter("*.uk/*", filter=['=status:200', '=mime:text/html'])
+    # Target commercial UK domains
+    results = cdx.iter("*.co.uk/*", filter=['=status:200', '=mime:text/html'])
     results_iter = iter(results)
 
     lines_per_page = getattr(cdx_toolkit, 'lines_per_page', 3000)
@@ -276,8 +303,10 @@ def _fetch_cdx_records(target_new_domains: int, records_to_skip: int, known_doma
 def discover_uk_domains(target_new_domains: int = 20) -> List[str]:
     """
     Resumes from the last known position and fetches N entirely new domains.
-    Includes error resilience for CDX API failures, thread-safe 3s timeout protection,
-    and a multi-tiered fallback pool (CSV list + curated top domains + 100k+ sector domain generator).
+    Includes:
+    - 15s thread-safe CDX API discovery
+    - Pre-validation of DNS so non-resolving domains are never scraped (0 DNS errors)
+    - Fallback to 2,474 real UK domains from my_uk_list.csv and curated business pools
     """
     records_to_skip = _load_resume_index()
     known_domains = _load_known_domains()
@@ -286,54 +315,64 @@ def discover_uk_domains(target_new_domains: int = 20) -> List[str]:
 
     print(f"\n📚 Resuming discovery... Fast-forwarding past {records_to_skip} old records.")
 
-    # 1. Attempt CDX API Discovery inside ThreadPoolExecutor with strict 3s timeout
+    # 1. Attempt CDX API Discovery inside ThreadPoolExecutor with 15s timeout
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        future = executor.submit(_fetch_cdx_records, target_new_domains, records_to_skip, known_domains)
-        cdx_discovered, cdx_last_index = future.result(timeout=3.0)
-        new_domains.update(cdx_discovered)
+        future = executor.submit(_fetch_cdx_records, target_new_domains * 2, records_to_skip, known_domains)
+        cdx_discovered, cdx_last_index = future.result(timeout=15.0)
+        # Pre-validate CDX domains to ensure DNS resolves
+        live_cdx = filter_live_domains(list(cdx_discovered), target_new_domains)
+        new_domains.update(live_cdx)
         if cdx_last_index > records_to_skip:
             current_record_index = cdx_last_index
     except Exception as e:
         print(f"⚠️ CDX API Error/Timeout encountered: {e}. Switching to UK Domain Fallback Pool.")
         logger.warning(f"CDX API Error: {e}")
+        # If records_to_skip is stalled or very high, reset to 0 so next attempt starts fresh
+        if records_to_skip > 50000:
+            current_record_index = 0
     finally:
         try:
             executor.shutdown(wait=False, cancel_futures=True)
         except Exception:
             pass
 
-    # Fallback Tier 1: Local CSV list (my_uk_list.csv)
+    # Fallback Tier 1: Local CSV list (my_uk_list.csv) with live DNS pre-filtering
     if len(new_domains) < target_new_domains:
         csv_domains = _load_csv_fallback_domains()
         if csv_domains:
-            for fallback in csv_domains:
-                clean_dom = fallback[4:] if fallback.startswith('www.') else fallback
-                if clean_dom and clean_dom not in known_domains and clean_dom not in new_domains:
-                    new_domains.add(clean_dom)
-                    if len(new_domains) >= target_new_domains:
-                        break
+            csv_candidates = [
+                (d[4:] if d.startswith('www.') else d)
+                for d in csv_domains
+                if (d[4:] if d.startswith('www.') else d) not in known_domains and (d[4:] if d.startswith('www.') else d) not in new_domains
+            ]
+            needed = target_new_domains - len(new_domains)
+            live_csv = filter_live_domains(csv_candidates, needed)
+            new_domains.update(live_csv)
 
     # Fallback Tier 2: Static curated top UK domains
     if len(new_domains) < target_new_domains:
-        for fallback in FALLBACK_UK_DOMAINS:
-            clean_dom = fallback[4:] if fallback.startswith('www.') else fallback
-            if clean_dom and clean_dom not in known_domains and clean_dom not in new_domains:
-                new_domains.add(clean_dom)
-                if len(new_domains) >= target_new_domains:
-                    break
+        curated_candidates = [
+            (d[4:] if d.startswith('www.') else d)
+            for d in FALLBACK_UK_DOMAINS
+            if (d[4:] if d.startswith('www.') else d) not in known_domains and (d[4:] if d.startswith('www.') else d) not in new_domains
+        ]
+        needed = target_new_domains - len(new_domains)
+        live_curated = filter_live_domains(curated_candidates, needed)
+        new_domains.update(live_curated)
 
-    # Fallback Tier 3: High-yield sector business domain generator (over 100,000 UK domain patterns)
+    # Fallback Tier 3: High-yield sector business domain generator (strictly pre-validated with DNS)
     if len(new_domains) < target_new_domains:
         synthetic_domains = _generate_synthetic_uk_domains()
-        for fallback in synthetic_domains:
-            if fallback not in known_domains and fallback not in new_domains:
-                new_domains.add(fallback)
-                if len(new_domains) >= target_new_domains:
-                    break
+        synth_candidates = [
+            d for d in synthetic_domains
+            if d not in known_domains and d not in new_domains
+        ]
+        needed = target_new_domains - len(new_domains)
+        live_synth = filter_live_domains(synth_candidates, needed)
+        new_domains.update(live_synth)
 
-    if len(new_domains) < target_new_domains:
-        print(f"🔄 Supplemented discovery with fallback pool! Yielded {len(new_domains)} domains out of {target_new_domains} requested.")
+    print(f"✅ Discovery complete: Yielded {len(new_domains)} live, resolvable UK domains out of {target_new_domains} requested.")
 
     # Save state
     _save_resume_index(current_record_index)

@@ -22,8 +22,8 @@ class BulkScrapeResponse(BaseModel):
 
 
 class ScrapeToDBRequest(BaseModel):
-    email_limit: int = 1000  # Number of emails to scrape before stopping
-    domain_limit: int = 100  # Number of domains to scrape (default 100, can go up to 10000)
+    email_limit: int = 1000  # Number of emails to scrape before stopping (can go up to 200000)
+    domain_limit: int = 100  # Number of domains to scrape (default 100, can go up to 100000)
     category: str = "AUTO"
 
     class Config:

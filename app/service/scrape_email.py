@@ -215,7 +215,7 @@ async def scrape_email_to_db(
             category_enum = EmailCategory.web
 
         # Validate domain_limit
-        domain_limit = max(1, min(domain_limit, 10000))
+        domain_limit = max(1, min(domain_limit, 100000))
 
         results = []
         total_emails_found = 0
