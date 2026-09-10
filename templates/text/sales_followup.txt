@@ -1,0 +1,15 @@
+Hi {name},
+
+I hope you've been doing well!
+I noticed you were interested in {product}. I wanted to reach out and see if you had any questions.
+
+Benefit 1: ...
+Benefit 2: ...
+Benefit 3: ...
+
+Would you be open to a quick call to discuss how we can help?
+
+Schedule a Call: {calendar_link}
+
+Best regards,
+{sales_rep_name}

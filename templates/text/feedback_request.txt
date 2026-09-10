@@ -1,0 +1,8 @@
+We'd Love Your Feedback! 💬
+
+Hello {name},
+
+Your opinion matters to us. Help us improve by sharing your feedback.
+It takes just 2 minutes!
+
+Take Survey: {survey_link}

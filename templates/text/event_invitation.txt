@@ -1,0 +1,9 @@
+You're Invited!
+
+Event: {event_name}
+Location: {event_location}
+Date: {event_date} at {event_time}
+
+{event_description}
+
+Register Now: {event_link}

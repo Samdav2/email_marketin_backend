@@ -1,0 +1,10 @@
+Hello {name},
+
+We're thrilled to announce the launch of {product_name}!
+
+Key Features:
+- Feature One
+- Feature Two
+- Feature Three
+
+Learn More & Get Started: {product_link}

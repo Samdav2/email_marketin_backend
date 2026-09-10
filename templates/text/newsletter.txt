@@ -1,0 +1,12 @@
+Hello {name},
+
+We've compiled the best content and updates from this month just for you.
+
+Top Stories:
+- Story 1
+- Story 2
+- Story 3
+
+Thank you for being part of our community!
+
+© 2026 Email Marketing. All rights reserved.
