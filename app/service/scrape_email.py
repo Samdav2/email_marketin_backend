@@ -3,7 +3,7 @@ import re
 import httpx
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
-from typing import Set, Dict, List
+from typing import Set, Dict, List, Optional, Any
 
 # --- CONFIGURATION ---
 MAX_PAGES_PER_DOMAIN = 4
