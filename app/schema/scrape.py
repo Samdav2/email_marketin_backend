@@ -14,6 +14,8 @@ class LeadData(BaseModel):
     status: str
     category: str | None = None
     subcategory: str | None = None
+    country: str | None = None
+    location: str | None = None
 
 class BulkScrapeResponse(BaseModel):
     total_processed: int
@@ -25,6 +27,8 @@ class ScrapeToDBRequest(BaseModel):
     email_limit: int = 1000  # Number of emails to scrape before stopping (can go up to 200000)
     domain_limit: int = 100  # Number of domains to scrape (default 100, can go up to 100000)
     category: str = "AUTO"
+    country: str | None = "UK"  # Target country e.g. "UK", "US", "CA", "AU", "DE", "FR", "ALL"
+    location: str | None = None  # Optional specific city or place e.g. "London", "Manchester", "New York"
 
     class Config:
         from_attribute = True

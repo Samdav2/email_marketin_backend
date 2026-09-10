@@ -12,11 +12,19 @@ HIGH_VALUE_PATHS = ['contact', 'about', 'team', 'support', 'reach', 'hello']
 from app.service.website_classifier import classify_website
 
 class AdvancedDomainScraper:
-    def __init__(self, base_url: str, preferred_category: Optional[str] = None):
+    def __init__(
+        self,
+        base_url: str,
+        preferred_category: Optional[str] = None,
+        country: Optional[str] = None,
+        location: Optional[str] = None
+    ):
         self.base_url = base_url if base_url.startswith('http') else f"http://{base_url}"
         # We clean the base netloc immediately to handle the 'www.' trap
         self.domain_netloc = self._clean_netloc(urlparse(self.base_url).netloc)
         self.preferred_category = preferred_category
+        self.country = country
+        self.location = location
         self.visited_urls = set()
         self.found_emails = set()
         self.crawled_html = []
@@ -131,9 +139,20 @@ class AdvancedDomainScraper:
         return self.found_emails
 
 # --- ORCHESTRATOR ---
-async def process_domain_task(domain: str, semaphore: asyncio.Semaphore, preferred_category: Optional[str] = None) -> Dict:
+async def process_domain_task(
+    domain: str,
+    semaphore: asyncio.Semaphore,
+    preferred_category: Optional[str] = None,
+    country: Optional[str] = None,
+    location: Optional[str] = None
+) -> Dict:
     async with semaphore:
-        scraper = AdvancedDomainScraper(domain, preferred_category=preferred_category)
+        scraper = AdvancedDomainScraper(
+            domain,
+            preferred_category=preferred_category,
+            country=country,
+            location=location
+        )
         emails = await scraper.run()
 
         return {
@@ -141,6 +160,8 @@ async def process_domain_task(domain: str, semaphore: asyncio.Semaphore, preferr
             "emails": list(emails),
             "category": scraper.category,
             "subcategory": scraper.subcategory,
+            "country": country,
+            "location": location,
             "pages_scanned": len(scraper.visited_urls),
             "status": "success" if emails else "no_emails_found"
         }

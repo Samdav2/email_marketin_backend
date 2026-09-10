@@ -20,6 +20,8 @@ class Email(SQLModel, table=True):
     category: str = Field(default="GENERAL", max_length=100)
     subcategory: Optional[str] = Field(default=None, nullable=True)
     domain: Optional[str] = Field(default=None, nullable=True)
+    country: Optional[str] = Field(default=None, nullable=True)
+    location: Optional[str] = Field(default=None, nullable=True)
 
 
 class Campaign(SQLModel, table=True):
@@ -40,6 +42,8 @@ class ScrapedDomain(SQLModel, table=True):
     status: str = Field(default="scraped")  # "success", "no_emails", "error"
     emails_count: int = Field(default=0)
     category: Optional[str] = Field(default=None, nullable=True)
+    country: Optional[str] = Field(default=None, nullable=True)
+    location: Optional[str] = Field(default=None, nullable=True)
     scraped_at: str = Field(default_factory=lambda: str(__import__('datetime').datetime.utcnow()))
 
 

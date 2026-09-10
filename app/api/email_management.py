@@ -90,6 +90,8 @@ async def get_all_emails_endpoint(
 
             cat = getattr(e, 'category', 'GENERAL') or 'GENERAL'
             subcat = getattr(e, 'subcategory', None)
+            country = getattr(e, 'country', None)
+            location = getattr(e, 'location', None)
 
             items.append(
                 EmailItem(
@@ -97,7 +99,9 @@ async def get_all_emails_endpoint(
                     email=e.email,
                     category=cat,
                     subcategory=subcat,
-                    domain=lead_domain
+                    domain=lead_domain,
+                    country=country,
+                    location=location
                 )
             )
 
@@ -169,7 +173,7 @@ async def export_emails_csv(
 
         output = io.StringIO()
         writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
-        writer.writerow(["Email Address", "Domain", "Category", "Subcategory"])
+        writer.writerow(["Email Address", "Domain", "Category", "Subcategory", "Country", "Location"])
 
         for e in raw_emails:
             domain = getattr(e, 'domain', '') or (e.email.split('@')[1] if '@' in e.email else '')
@@ -177,7 +181,9 @@ async def export_emails_csv(
             if cat.upper() in ("WEB", "MARKETING"):
                 cat = "GENERAL"
             subcat = getattr(e, 'subcategory', '') or ''
-            writer.writerow([e.email, domain, cat, subcat])
+            country = getattr(e, 'country', '') or ''
+            location = getattr(e, 'location', '') or ''
+            writer.writerow([e.email, domain, cat, subcat, country, location])
 
         csv_content = output.getvalue()
 

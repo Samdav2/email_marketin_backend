@@ -9,6 +9,8 @@ class EmailItem(BaseModel):
     category: str = "GENERAL"
     subcategory: Optional[str] = None
     domain: Optional[str] = None
+    country: Optional[str] = None
+    location: Optional[str] = None
 
 
 class CategoryInfo(BaseModel):

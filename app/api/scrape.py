@@ -93,7 +93,9 @@ async def scrape_to_db(request: ScrapeToDBRequest):
         task_info = scrape_task_manager.create_scrape_to_db_task(
             email_limit=request.email_limit,
             domain_limit=request.domain_limit,
-            category=request.category
+            category=request.category,
+            country=request.country,
+            location=request.location
         )
 
         logger.info(f"Background scrape-to-db task initialized: task_id={task_info['task_id']}")

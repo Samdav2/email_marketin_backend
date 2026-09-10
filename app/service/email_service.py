@@ -28,7 +28,9 @@ async def _save_emails_with_session(
     category: Union[Category, str],
     db: AsyncSession,
     subcategory: Optional[str] = None,
-    domain: Optional[str] = None
+    domain: Optional[str] = None,
+    country: Optional[str] = None,
+    location: Optional[str] = None
 ) -> dict:
     results = {
         'saved': 0,
@@ -85,6 +87,12 @@ async def _save_emails_with_session(
                 if lead_domain and not getattr(existing, 'domain', None):
                     existing.domain = lead_domain
                     enriched = True
+                if country and not getattr(existing, 'country', None):
+                    existing.country = country
+                    enriched = True
+                if location and not getattr(existing, 'location', None):
+                    existing.location = location
+                    enriched = True
 
                 if enriched:
                     db.add(existing)
@@ -97,13 +105,15 @@ async def _save_emails_with_session(
                 email=email_clean,
                 category=cat_str,
                 subcategory=subcategory,
-                domain=lead_domain
+                domain=lead_domain,
+                country=country,
+                location=location
             )
             db.add(new_email)
 
             results['saved'] += 1
             results['saved_emails'].append(email_clean)
-            logger.info(f"Saved email: {email_clean} | category: {cat_str} | subcategory: {subcategory}")
+            logger.info(f"Saved email: {email_clean} | category: {cat_str} | subcategory: {subcategory} | country: {country} | location: {location}")
 
         except Exception as e:
             results['failed'] += 1
@@ -125,7 +135,9 @@ async def _save_emails_with_session(
                             email=clean_addr,
                             category=cat_str,
                             subcategory=subcategory,
-                            domain=domain or clean_addr.split('@')[1]
+                            domain=domain or clean_addr.split('@')[1],
+                            country=country,
+                            location=location
                         )
                         db.add(ind_email)
                     await db.commit()
@@ -145,17 +157,20 @@ async def save_extracted_emails(
     category: Union[Category, str],
     db: Optional[AsyncSession] = None,
     subcategory: Optional[str] = None,
-    domain: Optional[str] = None
+    domain: Optional[str] = None,
+    country: Optional[str] = None,
+    location: Optional[str] = None
 ) -> dict:
     """
-    Save extracted emails to database with category, subcategory, and domain metadata.
+    Save extracted emails to database with category, subcategory, domain, country, and location metadata.
     Handles session lifecycle: if db is provided, uses it; otherwise opens a dedicated session.
     """
     if db is not None:
-        return await _save_emails_with_session(emails, category, db, subcategory, domain)
+        return await _save_emails_with_session(emails, category, db, subcategory, domain, country, location)
 
     async with AsyncSession(engine) as session:
-        return await _save_emails_with_session(emails, category, session, subcategory, domain)
+        return await _save_emails_with_session(emails, category, session, subcategory, domain, country, location)
+
 
 
 

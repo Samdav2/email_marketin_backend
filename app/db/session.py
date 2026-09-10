@@ -53,7 +53,11 @@ async def init_db() -> None:
             # Ensure columns exist on PostgreSQL
             "ALTER TABLE emails ADD COLUMN IF NOT EXISTS domain VARCHAR",
             "ALTER TABLE emails ADD COLUMN IF NOT EXISTS subcategory VARCHAR",
+            "ALTER TABLE emails ADD COLUMN IF NOT EXISTS country VARCHAR",
+            "ALTER TABLE emails ADD COLUMN IF NOT EXISTS location VARCHAR",
             "ALTER TABLE scraped_domains ADD COLUMN IF NOT EXISTS category VARCHAR",
+            "ALTER TABLE scraped_domains ADD COLUMN IF NOT EXISTS country VARCHAR",
+            "ALTER TABLE scraped_domains ADD COLUMN IF NOT EXISTS location VARCHAR",
             # Drop check constraints that might enforce enum values
             "ALTER TABLE emails DROP CONSTRAINT IF EXISTS emails_category_check",
             "ALTER TABLE campaigns DROP CONSTRAINT IF EXISTS campaigns_category_check",
@@ -73,6 +77,11 @@ async def init_db() -> None:
         migrations = [
             "ALTER TABLE emails ADD COLUMN domain VARCHAR",
             "ALTER TABLE emails ADD COLUMN subcategory VARCHAR",
+            "ALTER TABLE emails ADD COLUMN country VARCHAR",
+            "ALTER TABLE emails ADD COLUMN location VARCHAR",
+            "ALTER TABLE scraped_domains ADD COLUMN category VARCHAR",
+            "ALTER TABLE scraped_domains ADD COLUMN country VARCHAR",
+            "ALTER TABLE scraped_domains ADD COLUMN location VARCHAR",
             "UPDATE emails SET category = UPPER(category) WHERE category IS NOT NULL",
             "UPDATE campaigns SET category = UPPER(category) WHERE category IS NOT NULL",
         ]

@@ -51,9 +51,11 @@ async def record_scraped_domain_db(
     status: str,
     emails_count: int,
     category: Optional[str],
-    db: AsyncSession
+    db: AsyncSession,
+    country: Optional[str] = None,
+    location: Optional[str] = None
 ) -> None:
-    """Records a scraped domain status in PostgreSQL."""
+    """Records a scraped domain status in PostgreSQL with optional country and location."""
     try:
         clean_dom = domain.lower().strip()
         if clean_dom.startswith('www.'):
@@ -69,6 +71,10 @@ async def record_scraped_domain_db(
             existing.emails_count = emails_count
             if category:
                 existing.category = category
+            if country:
+                existing.country = country
+            if location:
+                existing.location = location
             existing.scraped_at = now_iso
             db.add(existing)
         else:
@@ -77,6 +83,8 @@ async def record_scraped_domain_db(
                 status=status,
                 emails_count=emails_count,
                 category=category,
+                country=country,
+                location=location,
                 scraped_at=now_iso
             )
             db.add(new_rec)
@@ -111,6 +119,10 @@ async def record_scraped_domains_batch_db(
                 existing.emails_count = r.get("emails_count", 0)
                 if r.get("category"):
                     existing.category = r.get("category")
+                if r.get("country"):
+                    existing.country = r.get("country")
+                if r.get("location"):
+                    existing.location = r.get("location")
                 existing.scraped_at = now_iso
                 db.add(existing)
             else:
@@ -119,6 +131,8 @@ async def record_scraped_domains_batch_db(
                     status=r.get("status", "scraped"),
                     emails_count=r.get("emails_count", 0),
                     category=r.get("category"),
+                    country=r.get("country"),
+                    location=r.get("location"),
                     scraped_at=now_iso
                 )
                 db.add(new_rec)
